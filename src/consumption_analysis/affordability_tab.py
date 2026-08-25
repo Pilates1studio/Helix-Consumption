@@ -52,6 +52,30 @@ BASES = {
     "Median household income": "burden_mhi",
 }
 
+# One clause per convention, keyed to the threshold names in
+# affordability.THRESHOLDS — assembled into the "Screening thresholds"
+# caption below for whichever ones a study's config actually carries. Keeping
+# them per-threshold means a build narrowed to a single convention (a
+# water-only district screening on EPA alone, say) never describes
+# conventions it isn't showing.
+_THRESHOLD_CLAUSES = {
+    "ca_needs_assessment": "The California State Water Board's Drinking Water "
+                           "Needs Assessment screens at 1.5% of MHI",
+    "epa_water": "EPA's drinking-water criterion is 2.5%",
+    "epa_wastewater": "EPA's wastewater residential indicator is 2.0%",
+    "epa_combined": "The 4.5% combined figure applies only to a combined water "
+                    "and wastewater utility — a water-only district should not "
+                    "screen against it",
+}
+
+
+def _threshold_caption(cfg: aff.AffordabilityConfig) -> str:
+    clauses = [_THRESHOLD_CLAUSES[name] for name in cfg.thresholds
+              if name in _THRESHOLD_CLAUSES]
+    body = ". ".join(clauses)
+    return ("Each of these is a **convention**, not a legal standard."
+            + (f" {body}." if body else ""))
+
 
 def _settings(cfg, geography: str | None = None) -> aff.AffordabilityConfig:
     raw = dict(getattr(cfg, "affordability", {}) or {})
@@ -197,13 +221,7 @@ def render(result, cfg) -> None:
     table = aff.burden(agg, acs, settings)
 
     st.subheader("Screening thresholds")
-    st.caption(
-        "Each of these is a **convention**, not a legal standard. The California "
-        "State Water Board's Drinking Water Needs Assessment screens at 1.5% of "
-        "MHI; EPA's drinking-water criterion is 2.5% and its wastewater "
-        "residential indicator 2.0%. The 4.5% combined figure applies only to a "
-        "combined water and wastewater utility — a water-only district should "
-        "not screen against it.")
+    st.caption(_threshold_caption(settings))
     st.dataframe(
         aff.summary(table, settings).style.format(
             {"% of income": "{:.1%}", "Accounts affected": "{:,.0f}"}),

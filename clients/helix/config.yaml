@@ -209,7 +209,13 @@ affordability:
   fixed_usage_per_month: 6.0      # hcf/month, the CA Needs Assessment convention
   min_accounts: 25                # suppress geographies thinner than this
   minimum_wage: 16.90             # CA statewide, effective 2026-01-01
-  primary_threshold: ca_needs_assessment
+  # Helix is a water-only district (all rate codes above are water: WRS/WMF/
+  # WCM/WGV/WMN/IRR/AGRI) — the EPA drinking-water criterion is the sole
+  # applicable convention. CA Needs Assessment and EPA's wastewater/combined
+  # conventions are dropped from this build rather than shown and caveated.
+  thresholds:
+    epa_water: 0.025
+  primary_threshold: epa_water
   boundary: geo/helix_boundary.geojson   # SWRCB SABL CA3710010, generalized 200 ft
   income_index:                   # ACS 2023 dollars -> Jul 2026 dollars
     enabled: true

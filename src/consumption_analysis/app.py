@@ -19,12 +19,13 @@ import io
 import os
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
 try:
     from consumption_analysis import (affordability_tab, billing, model, report,
-                                      store, theme)
+                                      store, summarize, theme)
     from consumption_analysis.affordability_tab import _paths as _aff_paths
     from consumption_analysis.affordability_tab import _tract_label
     from consumption_analysis.config import DerivedYear, StudyConfig
@@ -33,7 +34,7 @@ except ModuleNotFoundError:  # running the file directly, package not installed
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from consumption_analysis import (affordability_tab, billing, model, report,
-                                      store, theme)
+                                      store, summarize, theme)
     from consumption_analysis.affordability_tab import _paths as _aff_paths
     from consumption_analysis.affordability_tab import _tract_label
     from consumption_analysis.config import DerivedYear, StudyConfig
@@ -76,30 +77,96 @@ def _load(config_path: str, cache_path: str):
     return cfg, store.load(cfg, cache_path)
 
 
-def _fixed_charge_matrix(cfg: StudyConfig, class_names: list[str], side: str) -> pd.DataFrame:
+def _active_meter_sizes(cfg: StudyConfig, class_names: list[str]) -> list[str]:
+    """Meter sizes that actually carry a fixed charge somewhere in this study.
+
+    Structural, the same way tier suppression is: a size priced at $0 for
+    every class on both the existing and revised side (10" and 12" for
+    Helix — no customer holds one) is padding in the config, not a real
+    meter size, so it is dropped rather than shown as a row of zeros.
+    """
+    return [size for size in cfg.meter_sizes
+            if any(getattr(cfg.customer_classes[name], side).meter_charges.get(size, 0.0)
+                   for name in class_names for side in ("existing", "revised"))]
+
+
+def _fixed_charge_matrix(cfg: StudyConfig, class_names: list[str], side: str,
+                         sizes: list[str]) -> pd.DataFrame:
     """Meter size x customer class grid of fixed charges."""
     data = {
         name: [getattr(cfg.customer_classes[name], side).meter_charges.get(size, 0.0)
-               for size in cfg.meter_sizes]
+               for size in sizes]
         for name in class_names
     }
-    return pd.DataFrame(data, index=pd.Index(cfg.meter_sizes, name="Meter Size"))
+    return pd.DataFrame(data, index=pd.Index(sizes, name="Meter Size"))
+
+
+def _rate_active_tiers(rates) -> int:
+    """How many tiers of a rate schedule actually carry a nonzero commodity rate.
+
+    Rate-based rather than usage-based: this is what "how many tiers does this
+    class have" means structurally, and — unlike a usage count — it reads the
+    same for the revised schedule even before anyone has been billed under it.
+    A class always has at least one priced tier.
+    """
+    return max(sum(1 for r in rates if r), 1)
+
+
+def _class_active_tiers(cfg: StudyConfig, name: str) -> int:
+    """Active tier count for a class: the larger of its existing/revised sides,
+    so a widened structure on one side is never trimmed out of view."""
+    klass = cfg.customer_classes[name]
+    return max(_rate_active_tiers(klass.existing.commodity_rates),
+               _rate_active_tiers(klass.revised.commodity_rates))
+
+
+def _max_active_tiers(cfg: StudyConfig, class_names: list[str]) -> int:
+    return max((_class_active_tiers(cfg, name) for name in class_names), default=1)
 
 
 def _variable_rate_matrix(cfg: StudyConfig, class_names: list[str], side: str) -> pd.DataFrame:
-    tiers = [f"Tier {i + 1}" for i in range(5)]
-    data = {name: list(getattr(cfg.customer_classes[name], side).commodity_rates)
-            for name in class_names}
+    """Commodity rates by tier, trimmed to the widest active structure among
+    the classes shown. A class with fewer active tiers than that leaves the
+    remaining rows blank rather than showing its padding zeros."""
+    n_max = _max_active_tiers(cfg, class_names)
+    tiers = [f"Tier {i + 1}" for i in range(n_max)]
+    data = {}
+    for name in class_names:
+        rates = list(getattr(cfg.customer_classes[name], side).commodity_rates)
+        n_active = _class_active_tiers(cfg, name)
+        data[name] = [rates[i] if i < n_active else np.nan for i in range(n_max)]
     return pd.DataFrame(data, index=pd.Index(tiers, name="Tier"))
 
 
-def _tier_width_matrix(cfg: StudyConfig, class_names: list[str], side: str) -> pd.DataFrame:
-    tiers = [f"Tier {i + 1}" for i in range(5)]
+def _tier_structure_matrix(cfg: StudyConfig, class_names: list[str], side: str) -> pd.DataFrame:
+    """Usage allotment per tier per class, in plain language rather than raw widths.
+
+    A class with only one active tier reads as "Uniform" — there is no tier
+    structure to show, just a single rate. The last active tier is always the
+    one that structurally absorbs everything the tiers below it don't — so
+    rather than print its padding-sized width (e.g. 9999999), it is labelled
+    as the catch-all it actually is. Tiers beyond a class's active count are
+    blank: they carry a zero rate and never see real usage.
+    """
+    n_max = _max_active_tiers(cfg, class_names)
+    rows = [f"Tier {i + 1}" for i in range(n_max)]
     data = {}
     for name in class_names:
         widths = getattr(cfg.customer_classes[name], side).tier_widths
-        data[name] = ["budget" if w is None else f"{float(w):,.0f}" for w in widths]
-    return pd.DataFrame(data, index=pd.Index(tiers, name="Tier"))
+        n_active = _class_active_tiers(cfg, name)
+        col = []
+        for i in range(n_max):
+            if i >= n_active:
+                col.append("—")
+            elif n_active == 1:
+                col.append("Uniform")
+            elif i == n_active - 1:
+                col.append(f"All usage > Tier {n_active - 1}")
+            else:
+                w = widths[i]
+                col.append("Budget" if w is None else f"{float(w):,.0f} {cfg.units}")
+        data[name] = col
+    return pd.DataFrame(data, index=pd.Index(rows, name="Tier"))
 
 
 def _change_frame(existing: pd.DataFrame, revised: pd.DataFrame) -> pd.DataFrame:
@@ -220,8 +287,9 @@ def _rates(cfg: StudyConfig, class_names: list[str], default_class: str) -> None
     st.subheader("Fixed charges by meter size")
     st.caption("Charged every billing period regardless of usage. These drive the "
                "fixed portion of every bill on the Bill Impact tab.")
-    existing_fixed = _fixed_charge_matrix(cfg, class_names, "existing")
-    revised_fixed = _fixed_charge_matrix(cfg, class_names, "revised")
+    active_sizes = _active_meter_sizes(cfg, class_names)
+    existing_fixed = _fixed_charge_matrix(cfg, class_names, "existing", active_sizes)
+    revised_fixed = _fixed_charge_matrix(cfg, class_names, "revised", active_sizes)
 
     # A uniform fixed-charge schedule is the norm; per-class schedules are the
     # anomaly. When every class carries the same charges, the per-class columns
@@ -233,18 +301,21 @@ def _rates(cfg: StudyConfig, class_names: list[str], default_class: str) -> None
         existing_fixed = existing_fixed.iloc[:, [0]].set_axis(["Rate"], axis=1)
         revised_fixed = revised_fixed.iloc[:, [0]].set_axis(["Rate"], axis=1)
 
+    # width='content' — not 'stretch' — so this table sizes to its own columns
+    # instead of filling the page. A Meter Size + Rate (+ Change) grid stretched
+    # to full width leaves the Rate column stranded far from its row labels.
     view = st.radio("Show", ["Existing", "Proposed", "Change"], horizontal=True,
                     key="rates_fixed_view", label_visibility="collapsed")
     if view == "Existing":
-        st.dataframe(existing_fixed.style.format(money), width='stretch')
+        st.dataframe(existing_fixed.style.format(money), width='content')
     elif view == "Proposed":
         if revised_fixed.to_numpy().sum() == 0:
             st.warning("No proposed fixed charges entered yet.")
-        st.dataframe(revised_fixed.style.format(money), width='stretch')
+        st.dataframe(revised_fixed.style.format(money), width='content')
     else:
         change = _change_frame(existing_fixed, revised_fixed)
         fmt = {c: (money if c.endswith("$") else "{:+.1%}") for c in change.columns}
-        st.dataframe(change.style.format(fmt, na_rep="—"), width='stretch')
+        st.dataframe(change.style.format(fmt, na_rep="—"), width='content')
 
     st.markdown("---")
     st.subheader("Variable rates by customer class")
@@ -256,13 +327,38 @@ def _rates(cfg: StudyConfig, class_names: list[str], default_class: str) -> None
     var_view = st.radio("Show", ["Existing", "Proposed", "Change"], horizontal=True,
                         key="rates_var_view", label_visibility="collapsed")
     if var_view == "Existing":
-        st.dataframe(existing_var.style.format(money), width='stretch')
+        st.dataframe(existing_var.style.format(money, na_rep="—"), width='stretch')
     elif var_view == "Proposed":
-        st.dataframe(revised_var.style.format(money), width='stretch')
+        st.dataframe(revised_var.style.format(money, na_rep="—"), width='stretch')
     else:
         change = _change_frame(existing_var, revised_var)
         fmt = {c: (money if c.endswith("$") else "{:+.1%}") for c in change.columns}
         st.dataframe(change.style.format(fmt, na_rep="—"), width='stretch')
+
+    st.markdown("---")
+    st.subheader("Usage tiers by customer class")
+    st.caption("How usage is allotted within each class's variable rate. A class "
+               "with a single active tier bills one uniform rate; the last tier "
+               "shown always catches all remaining usage, so it reads as such "
+               "rather than as a placeholder width.")
+    existing_tiers = _tier_structure_matrix(cfg, class_names, "existing")
+    revised_tiers = _tier_structure_matrix(cfg, class_names, "revised")
+    if var_view == "Existing":
+        st.dataframe(existing_tiers, width='stretch')
+    elif var_view == "Proposed":
+        st.dataframe(revised_tiers, width='stretch')
+    elif existing_tiers.equals(revised_tiers):
+        st.dataframe(existing_tiers, width='stretch')
+        st.caption("Tier boundaries are unchanged between existing and proposed "
+                   "rates — only the commodity rates above change.")
+    else:
+        t1, t2 = st.columns(2)
+        with t1:
+            st.markdown("**Existing**")
+            st.dataframe(existing_tiers, width='stretch')
+        with t2:
+            st.markdown("**Proposed**")
+            st.dataframe(revised_tiers, width='stretch')
 
     st.markdown("---")
     st.caption("Rates and rate structure are locked in this review build. To review a "
@@ -289,6 +385,10 @@ def _tier_detail(result: model.StudyResult, cfg: StudyConfig, name: str) -> None
         return
     summary = result.classes[name].summary_existing
     klass = cfg.customer_classes[name]
+    if not result.has_tiers(name):
+        st.info(f"{name} is on a uniform rate — there is only one tier, so "
+                "there is nothing to break out here.")
+        return
     st.caption("Budget-based: Tier 1 is each account's water-budget allotment."
                if klass.is_budget_based else
                f"Volumetric: tier widths prorated over {cfg.days_per_period} days "
@@ -299,27 +399,33 @@ def _tier_detail(result: model.StudyResult, cfg: StudyConfig, name: str) -> None
     c2.metric("Usage", f"{summary.total_usage['Total']:,.0f} {cfg.units}")
     c3.metric("Meters", f"{summary.meter_counts.loc['Total', 'Accounts']:,.0f}")
 
+    # Trimmed to the tiers that actually carry usage — a class's unused
+    # padding tiers (always zero here) add nothing but noise to every table
+    # below.
+    active = summarize.active_tiers(summary)
+    rows = active + ["Total"]
+
     st.subheader(f"Total usage by tier ({cfg.units})")
     st.caption("Where each unit of water was priced.")
-    st.altair_chart(theme.total_bars(summary.usage_by_tier, "Tier", cfg.units),
+    st.altair_chart(theme.total_bars(summary.usage_by_tier.loc[active], "Tier", cfg.units),
                     width='stretch')
     with st.expander("Usage by tier and billing period"):
-        st.dataframe(summary.usage_by_tier.style.format("{:,.0f}"), width='stretch')
+        st.dataframe(summary.usage_by_tier.loc[rows].style.format("{:,.0f}"), width='stretch')
 
     st.subheader(f"Usage stopped in tier ({cfg.units})")
     st.caption("All usage from bills that ended in each tier — this is what groups "
                "customers into Tier 1 / Tier 2 / Tier 3 cohorts.")
-    st.dataframe(summary.usage_stopped_in_tier.style.format("{:,.0f}"),
+    st.dataframe(summary.usage_stopped_in_tier.loc[rows].style.format("{:,.0f}"),
                  width='stretch')
 
     left, right = st.columns(2)
     with left:
         st.subheader("Contributing accounts")
-        st.dataframe(summary.contributing_accounts.style.format("{:,.0f}"),
+        st.dataframe(summary.contributing_accounts.loc[rows].style.format("{:,.0f}"),
                      width='stretch')
     with right:
         st.subheader(f"Usage per contributing account ({cfg.units})")
-        st.dataframe(summary.usage_per_account.style.format("{:,.1f}"),
+        st.dataframe(summary.usage_per_account.loc[rows].style.format("{:,.1f}"),
                      width='stretch')
 
 
@@ -851,13 +957,7 @@ def _impact_distribution(result: model.StudyResult, cfg: StudyConfig,
         st.caption(f"{pooled['accounts']:,} accounts across "
                    f"{len(result.classes)} customer classes.")
         existing_rev, revised_rev = pooled["existing_annual"], pooled["revised_annual"]
-        deltas, pcts = pooled["delta_period"], pooled["pct_annual"]
-        dollar_edges = (buckets.get("bill_dollars") or {}).get("Total")
-        if dollar_edges is None:
-            # No system-wide bucket configured; fall back to the widest class set
-            # so the table still spans every impact rather than truncating.
-            per_class = (buckets.get("bill_dollars") or {}).values()
-            dollar_edges = max(per_class, key=lambda e: e[-1]) if per_class else None
+        pcts = pooled["pct_annual"]
     else:
         res = result.classes[scope]
         st.markdown(f"### {scope}")
@@ -867,8 +967,7 @@ def _impact_distribution(result: model.StudyResult, cfg: StudyConfig,
                        "is just the removal of the existing bill.")
         existing_rev = res.bills.existing.annual().sum()
         revised_rev = res.bills.revised.annual().sum()
-        deltas, pcts = res.bills.delta_period, res.bills.pct_annual
-        dollar_edges = (buckets.get("bill_dollars") or {}).get(scope)
+        pcts = res.bills.pct_annual
 
     change = revised_rev - existing_rev
     c1, c2, c3 = st.columns(3)
@@ -877,9 +976,9 @@ def _impact_distribution(result: model.StudyResult, cfg: StudyConfig,
     c3.metric("Change", f"${change:,.0f}",
               delta=f"{change / existing_rev:+.1%}" if existing_rev else None)
 
+    # Bill impacts by dollar amount are dropped from this client-facing build —
+    # account impacts by percent change is the one distribution shown here.
     for title, values, edges, axis, fmt, kind in (
-        ("Bill impacts by period ($)", deltas, dollar_edges, "Change in bill ($)",
-         model.DOLLAR_LABEL, "dollars"),
         ("Account impacts (annual %)", pcts, percents, "Change in annual bill (%)",
          model.PERCENT_LABEL, "percent"),
     ):
@@ -925,6 +1024,13 @@ def _accounts(result: model.StudyResult, cfg: StudyConfig, name: str) -> None:
         st.info(f"No accounts in {name}.")
         return
     detail = result.classes[name].account_detail(cfg.periods)
+    # account_detail() always builds tier_1..5 columns (RateSchedule pads every
+    # class to 5 tiers); drop the ones beyond this class's active tiers so the
+    # table and its download don't carry columns that are always zero.
+    n_active = len(summarize.active_tiers(result.classes[name].summary_existing))
+    unused_cols = [f"{side}_tier_{i + 1}" for i in range(n_active, 5)
+                   for side in ("existing", "revised")]
+    detail = detail.drop(columns=[c for c in unused_cols if c in detail.columns])
     st.caption(f"{len(detail):,} accounts. Filter, sort, then download.")
     c1, c2 = st.columns(2)
     sizes = c1.multiselect("Meter size", sorted(detail["meter_sz"].unique()))

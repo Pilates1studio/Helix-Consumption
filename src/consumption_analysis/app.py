@@ -28,8 +28,7 @@ try:
                                       store, summarize, theme)
     from consumption_analysis.affordability_tab import _paths as _aff_paths
     from consumption_analysis.affordability_tab import _tract_label
-    from consumption_analysis.config import DerivedYear, StudyConfig
-    from consumption_analysis.ingest import derive_year
+    from consumption_analysis.config import StudyConfig
 except ModuleNotFoundError:  # running the file directly, package not installed
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -37,8 +36,7 @@ except ModuleNotFoundError:  # running the file directly, package not installed
                                       store, summarize, theme)
     from consumption_analysis.affordability_tab import _paths as _aff_paths
     from consumption_analysis.affordability_tab import _tract_label
-    from consumption_analysis.config import DerivedYear, StudyConfig
-    from consumption_analysis.ingest import derive_year
+    from consumption_analysis.config import StudyConfig
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 AGENCY_SLUG = "helix"  # pinned — this build only ever serves Helix
@@ -210,15 +208,6 @@ def main() -> None:
     year = st.sidebar.selectbox(
         "Fiscal year", available, key="year",
         index=available.index(cfg.selected_year) if cfg.selected_year in available else 0)
-
-    with st.sidebar.expander("Build a multi-year average"):
-        picked = st.multiselect("Average these years", cfg.fiscal_years,
-                                default=cfg.fiscal_years[:2])
-        label = st.text_input("Series name", value=f"{len(picked)}-Yr Avg" if picked else "")
-        if st.button("Add series", disabled=len(picked) < 2 or not label):
-            cfg.derived_years.append(DerivedYear(name=label, source_years=picked))
-            derive_year(accounts, cfg)
-            st.success(f"Added {label}; select it above.")
 
     class_names = [n for n in cfg.customer_classes if (accounts.meta["cust_class"] == n).any()]
     st.sidebar.markdown("---")

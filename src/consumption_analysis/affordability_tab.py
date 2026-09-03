@@ -478,16 +478,17 @@ def _accounts_panel(joined: pd.DataFrame, live: pd.DataFrame, crosswalk_path: st
          except Exception:
              pass
          
-         cols = {"location_no": "Account", "city": "City",
-                 "meter_sz": "Meter", "annual_usage": "Annual usage",
-                 "bill_existing": "Existing Annual Bill",
-                 "bill_revised": "Proposed Annual Bill",
-                 "bill_change_pct": "Change",
-                 "pct_income": "Burden %"}
+         # Add tract label for display
+         frame["tract_label"] = frame["geoid"].map(_tract_label)
          
-         frame["bill_change_pct"] = (frame["bill_revised"] - frame["bill_existing"]) \
-             / frame["bill_existing"].where(frame["bill_existing"] != 0)
+         # Calculate burden % for display
          frame["pct_income"] = frame["bill_revised"] / frame["mhi"]
+         
+         # Define columns to display in the order requested
+         cols = {"tract_label": "Tract", "location_no": "Account",
+                 "meter_sz": "Meter", "annual_usage": "Annual usage",
+                 "bill_revised": "Proposed Bill",
+                 "pct_income": "Burden %"}
          
          present = {k: v for k, v in cols.items() if k in frame.columns}
          st.dataframe(

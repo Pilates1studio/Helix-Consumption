@@ -391,19 +391,24 @@ def _filter_by_burden(joined: pd.DataFrame, live: pd.DataFrame, filter_type: str
      Returns:
          Filtered DataFrame
      """
+     # Merge mhi data from live dataframe for both filter types
+     frame = joined.copy()
+     if "mhi" not in frame.columns:
+         mhi_data = live[["geoid", "mhi"]].drop_duplicates(subset=["geoid"])
+         frame = frame.merge(mhi_data, on="geoid", how="left")
+     
      if filter_type == "tract":
-         # Filter by geography's burden threshold
-         # Get geographies that meet the burden criteria from live data
+         # Filter by tract's burden threshold
+         # Get tracts that meet the burden criteria from live data
          if operator == "gt":
              valid_geos = live[live[column] > threshold]["geoid"].unique()
          else:  # "lt"
              valid_geos = live[live[column] < threshold]["geoid"].unique()
-         frame = joined[joined["geoid"].isin(valid_geos)].copy()
+         frame = frame[frame["geoid"].isin(valid_geos)]
      else:  # "individual"
          # Filter by individual account's burden
-         frame = joined.copy()
          # Each account has their own burden % (bill/income)
-         # Use the tract/geography's median household income for consistency
+         # Use the tract's median household income for consistency
          pct_income = frame["bill_revised"] / frame["mhi"]
          if operator == "gt":
              frame = frame[pct_income > threshold]

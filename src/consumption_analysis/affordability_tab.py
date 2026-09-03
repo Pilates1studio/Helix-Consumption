@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 # Configure Pandas Styler to allow larger dataframes
 # Needed when displaying large filtered result sets
-pd.set_option("styler.render.max_elements", 500000)
+pd.set_option("styler.render.max_elements", 1000000)
 
 # A single-hue sequential ramp: light is affordable, deep is a heavier burden.
 # Deliberately not red/green â€” the firm does not editorialise on an exhibit, and

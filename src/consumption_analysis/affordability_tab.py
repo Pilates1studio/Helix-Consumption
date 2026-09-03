@@ -383,7 +383,7 @@ def _filter_by_burden(joined: pd.DataFrame, live: pd.DataFrame, filter_type: str
      Args:
          joined: DataFrame with account details
          live: DataFrame with geography-level burden data
-         filter_type: "geography" (filter by geography's burden) or "individual" (by account's burden)
+         filter_type: "tract" (filter by tract's burden) or "individual" (by account's burden)
          operator: "gt" (greater than) or "lt" (less than)
          threshold: burden % threshold (as decimal, e.g., 0.025 for 2.5%)
          column: burden column name (e.g., "burden_mhi")
@@ -391,7 +391,7 @@ def _filter_by_burden(joined: pd.DataFrame, live: pd.DataFrame, filter_type: str
      Returns:
          Filtered DataFrame
      """
-     if filter_type == "geography":
+     if filter_type == "tract":
          # Filter by geography's burden threshold
          # Get geographies that meet the burden criteria from live data
          if operator == "gt":
@@ -434,8 +434,8 @@ def _accounts_panel(joined: pd.DataFrame, live: pd.DataFrame, crosswalk_path: st
              st.markdown("")
          b1, b2, b3 = st.columns(3)
          with b1:
-             bt = st.radio("Type", ["geography", "individual"],
-                          format_func=lambda x: "Geography" if x == "geography" else "Account",
+             bt = st.radio("Type", ["tract", "individual"],
+                          format_func=lambda x: "Tract" if x == "tract" else "Account",
                           horizontal=True, key="aff_burden_type")
          with b2:
              op = st.radio("Operator", ["gt", "lt"],

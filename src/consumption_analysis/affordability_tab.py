@@ -420,154 +420,13 @@ def _filter_by_burden(joined: pd.DataFrame, live: pd.DataFrame, filter_type: str
          frame = frame[frame["geoid"].isin(valid_geos)]
      else:  # "individual"
          # Filter by individual account's burden
-         # Each account has their own burden % (bill/income)
-         # Use the tract's median household income for consistency
-         pct_income = frame["bill_revised"] / frame["mhi"]
-         if operator == "gt":
-             frame = frame[pct_income > threshold]
-         else:  # "lt"
-             frame = frame[pct_income < threshold]
-     
-     return frame
-
-
-
-def _accounts_panel(joined: pd.DataFrame, live: pd.DataFrame, crosswalk_path: str,
-                    settings, geography: str, clicked: str | None, 
-                    column: str) -> None:
-     """Dual-mode account filter: by tract or by burden %."""
-     if "aff_filter_mode" not in st.session_state:
-         st.session_state["aff_filter_mode"] = "tract"
-     
-     st.subheader("Account Filter")
-     c1, c2 = st.columns([1, 2])
-     with c1:
-         fm = st.radio("Filter by", ["tract", "burden"],
-                      format_func=lambda x: "Tract" if x == "tract" else "Burden %",
-                      horizontal=True, key="aff_filter_mode")
-     
-     # BURDEN FILTER MODE
-     if fm == "burden":
-         with c2:
-             st.markdown("")
-         b1, b2, b3 = st.columns(3)
-         with b1:
-             bt = st.radio("Type", ["tract", "individual"],
-                          format_func=lambda x: "Tract" if x == "tract" else "Account",
-                          horizontal=True, key="aff_burden_type")
-         with b2:
-             op = st.radio("Operator", ["gt", "lt"],
-                          format_func=lambda x: ">" if x == "gt" else "<",
-                          horizontal=True, key="aff_burden_operator")
-         with b3:
-             tp = st.number_input("Threshold (%)", min_value=0.0, max_value=100.0,
-                                 value=2.5, step=0.1, key="aff_burden_threshold")
          
-         frame = _filter_by_burden(joined, live, bt, op, tp/100, column)
-         frame = frame[frame["annual_usage"] > 0].copy()
-         if settings.basis_classes:
-             frame = frame[frame["cust_class"].isin(settings.basis_classes)]
-         
-         # Merge mhi data from live dataframe for burden calculations
-         if "mhi" not in frame.columns:
-             mhi_data = live[["geoid", "mhi"]].drop_duplicates(subset=["geoid"])
-             frame = frame.merge(mhi_data, on="geoid", how="left")
-         
-         st.info(f"**{len(frame):,}** accounts with burden {_operator_label(op)} {tp:.1f}%")
-         
-         try:
-             extra = pd.read_csv(crosswalk_path, dtype=str)
-             extra.columns = [c.strip().lower() for c in extra.columns]
-             k = settings.crosswalk_key.lower()
-             if k in extra.columns and "city" in extra.columns:
-                 extra = extra.drop_duplicates(subset=[k])
-                 frame[settings.crosswalk_key] = frame[settings.crosswalk_key].astype(str)
-                 frame = frame.merge(extra[[k, "city"]], how="left",
-                                    left_on=settings.crosswalk_key, right_on=k)
-         except Exception:
-             pass
-         
-         # Add tract reference number (human-readable without "Tract " prefix)
-         frame["tract_label"] = frame["geoid"].map(_tract_number)
-         # Add numeric tract number for sorting
-         frame["tract_number"] = frame["geoid"].astype(str).str[-6:].astype(int)
-         
-         # Calculate burden % for display
-         frame["pct_income"] = frame["bill_revised"] / frame["mhi"]
          
          # Define columns to display in the order requested
          cols = {"tract_label": "Tract", "location_no": "Account",
                  "meter_sz": "Meter", "annual_usage": "Annual usage",
                  "bill_revised": "Proposed Annual Bill",
                  "pct_income": "Burden %"}
-         
-         present = {k: v for k, v in cols.items() if k in frame.columns}
-         st.dataframe(
-             frame.sort_values(["tract_number", "location_no"], ascending=True)[list(present)]
-             .rename(columns=present).style.format({
-                 "Annual usage": "{:,.0f}", "Existing Annual Bill": "${:,.0f}",
-                 "Proposed Annual Bill": "${:,.0f}", "Change": "{:+.1%}",
-                 "Burden %": "{:.2%}"}),
-             width="stretch", hide_index=True, height=420)
-     
-     # TRACT FILTER MODE
-     else:
-         options = live.sort_values("geoid", ascending=True)["geoid"].tolist()
-         if not options:
-             st.warning("No geographies available.")
-             return
-         
-         st.markdown("")
-         # The selection event persists across reruns, so the click is applied only
-         # when it differs from the last one seen. Otherwise the map's most recent
-         # click would override the pulldown on every rerun and the pulldown would
-         # go dead after the first click.
-         if clicked in options and clicked != st.session_state.get("aff_last_click"):
-             st.session_state["aff_focus"] = clicked
-             st.session_state["aff_last_click"] = clicked
-         if st.session_state.get("aff_focus") not in options:
-             st.session_state.pop("aff_focus", None)
-         focus = st.selectbox(
-             "Click a tract on the map, or pick one here", options,
-             key="aff_focus", format_func=_tract_label)
-
-         frame = joined[joined["geoid"] == focus]
-         if settings.basis_classes:
-             frame = frame[frame["cust_class"].isin(settings.basis_classes)]
-         frame = frame[frame["annual_usage"] > 0].copy()
-
-         # City rides along from the crosswalk file when it carries one. Street
-         # addresses are deliberately NOT shown — account number plus city is
-         # enough to work a list without putting a household's address on screen.
-         try:
-             extra = pd.read_csv(crosswalk_path, dtype=str)
-             extra.columns = [c.strip().lower() for c in extra.columns]
-             key = settings.crosswalk_key.lower()
-             carry = [c for c in ("city",) if c in extra.columns]
-             if carry and key in extra.columns:
-                 extra = extra.drop_duplicates(subset=[key])
-                 frame[settings.crosswalk_key] = frame[settings.crosswalk_key].astype(str)
-                 frame = frame.merge(extra[[key] + carry], how="left",
-                                     left_on=settings.crosswalk_key, right_on=key)
-         except Exception:                                  # noqa: BLE001
-             carry = []
-
-         row = live.loc[live["geoid"] == focus].iloc[0]
-         bits = [f"{len(frame):,} accounts", f"median bill ${row['bill_revised']:,.0f}"]
-         if pd.notna(row.get("burden_mhi")):
-             bits.append(f"burden {row['burden_mhi']:.2%}")
-         if pd.notna(row.get("mhi")):
-             bits.append(f"median income ${row['mhi']:,.0f}")
-         st.caption(f"**{_tract_label(focus)}** — " + " · ".join(bits))
-
-         cols = {"location_no": "Account", "city": "City",
-                 "meter_sz": "Meter", "annual_usage": "Annual usage",
-                 "bill_existing": "Existing Annual Bill",
-                 "bill_revised": "Proposed Annual Bill",
-                 "bill_change_pct": "Change",
-                 "pct_income": "Proposed Bill as % of Income"}
-         frame["bill_change_pct"] = (frame["bill_revised"] - frame["bill_existing"]) \
-             / frame["bill_existing"].where(frame["bill_existing"] != 0)
          # Each account's own bill against the geography's median household income
          # (CPI-indexed) — the same denominator the map uses, so the account list
          # and the map agree about what a percent means.
@@ -578,9 +437,9 @@ def _accounts_panel(joined: pd.DataFrame, live: pd.DataFrame, crosswalk_path: st
          st.dataframe(
              frame.sort_values(["tract_number", "location_no"], ascending=True)[list(present)]
              .rename(columns=present).style.format({
-                 "Annual usage": "{:,.0f}", "Existing Annual Bill": "${:,.0f}",
-                 "Proposed Annual Bill": "${:,.0f}", "Change": "{:+.1%}",
-                 "Proposed Bill as % of Income": "{:.2%}"}),
+                 "Annual usage": "{:,.0f}",
+                 "Proposed Annual Bill": "${:,.0f}",
+                 "Burden %": "{:.2%}"}),
              width="stretch", hide_index=True, height=420)
 def _map(geojson: dict, table: pd.DataFrame, column: str, cfg,
          threshold: float = 0.015, boundary: dict | None = None) -> dict:

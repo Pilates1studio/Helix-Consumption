@@ -45,29 +45,6 @@ st.set_page_config(page_title="Helix Consumption Analysis — Staff Review", lay
 theme.inject(st)
 
 
-def _require_passcode() -> None:
-    """Gate the whole app behind a shared passcode for the named reviewers.
-
-    Set via the PASSCODE env var on Render; never hardcoded in source so it
-    isn't sitting in plaintext in the git history.
-    """
-    expected = os.environ.get("PASSCODE")
-    if not expected:
-        st.error("PASSCODE is not configured on this deployment — set it as an "
-                 "env var before sharing this link.")
-        st.stop()
-    if st.session_state.get("authed"):
-        return
-    st.title("Helix Consumption Analysis — Staff Review")
-    entered = st.text_input("Passcode", type="password")
-    if st.button("Enter") or entered:
-        if entered == expected:
-            st.session_state["authed"] = True
-            st.rerun()
-        elif entered:
-            st.error("Incorrect passcode.")
-    st.stop()
-
 
 @st.cache_data(show_spinner=False)
 def _load(config_path: str, cache_path: str):
@@ -198,7 +175,6 @@ def sidebar_inputs() -> tuple[str, str]:
 
 
 def main() -> None:
-    _require_passcode()
     config_path, cache_path = sidebar_inputs()
     cfg, accounts = _load(config_path, cache_path)
 

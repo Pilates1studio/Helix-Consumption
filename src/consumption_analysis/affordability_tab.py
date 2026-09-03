@@ -1,7 +1,7 @@
-"""Streamlit view for the affordability analysis.
+﻿"""Streamlit view for the affordability analysis.
 
-Kept out of ``app.py`` because it is the one tab with external inputs — a
-crosswalk, an ACS vintage, a geometry file — and the one tab whose output is
+Kept out of ``app.py`` because it is the one tab with external inputs â€” a
+crosswalk, an ACS vintage, a geometry file â€” and the one tab whose output is
 *not* part of the rate study. Separating it keeps that boundary visible in the
 file layout, not just in a footnote.
 """
@@ -21,7 +21,7 @@ from . import theme
 log = logging.getLogger(__name__)
 
 # A single-hue sequential ramp: light is affordable, deep is a heavier burden.
-# Deliberately not red/green — the firm does not editorialise on an exhibit, and
+# Deliberately not red/green â€” the firm does not editorialise on an exhibit, and
 # a diverging palette implies a good/bad verdict the analysis does not support.
 RAMP = ["#EAF2F5", "#BBD7DF", "#8ABBC8", "#4E93A5", theme.TEAL, "#0A4A5A"]
 
@@ -30,20 +30,20 @@ GEO_LABELS = {
     "zcta": "ZIP code (ZCTA approximation)",
 }
 
-# Ordered by defensibility, best first — the selector offers them in this order
+# Ordered by defensibility, best first â€” the selector offers them in this order
 # so the sound choice is the one already selected.
 GEO_ORDER = ["tract", "zcta"]
 
-# One screening basis on screen: median household income — the measure the
+# One screening basis on screen: median household income â€” the measure the
 # regulatory conventions (CA 1.5%, EPA 2.5%/2.0%) are defined on. The others
 # are computed and exported but deliberately not offered as views:
 # - Mean: exceeds the median almost everywhere, most where the low-income
-#   population is largest — systematically the friendlier number. Kept as the
+#   population is largest â€” systematically the friendlier number. Kept as the
 #   mean/median skew ratio in the table.
 # - Lowest quintile (B19081): removed from the display per Beeb; still in the
 #   CSV export for targeting work.
 # - Renter median (B25119_003): the median for ALL renter-occupied households
-#   in the tract, regardless of structure — ACS publishes no income table by
+#   in the tract, regardless of structure â€” ACS publishes no income table by
 #   tenure AND structure type. On a Single-Family basis it mostly reflects
 #   households in complexes, i.e. the wrong population. Its correct use is a
 #   per-unit Multi-Family burden at an agency with dwelling-unit counts;
@@ -53,7 +53,7 @@ BASES = {
 }
 
 # One clause per convention, keyed to the threshold names in
-# affordability.THRESHOLDS — assembled into the "Screening thresholds"
+# affordability.THRESHOLDS â€” assembled into the "Screening thresholds"
 # caption below for whichever ones a study's config actually carries. Keeping
 # them per-threshold means a build narrowed to a single convention (a
 # water-only district screening on EPA alone, say) never describes
@@ -64,7 +64,7 @@ _THRESHOLD_CLAUSES = {
     "epa_water": "EPA's drinking-water criterion is 2.5%",
     "epa_wastewater": "EPA's wastewater residential indicator is 2.0%",
     "epa_combined": "The 4.5% combined figure applies only to a combined water "
-                    "and wastewater utility — a water-only district should not "
+                    "and wastewater utility â€” a water-only district should not "
                     "screen against it",
 }
 
@@ -152,9 +152,9 @@ def render(result, cfg) -> None:
         st.info(
             "Affordability inputs are not configured yet. Add an "
             "`affordability:` block to the agency config with, per geography:\n\n"
-            "- `crosswalk` — CSV of account key to ZIP or tract GEOID\n"
-            "- `acs` — the ACS pull from `tools/fetch_census.py`\n"
-            "- `geometry` — Census cartographic-boundary GeoJSON (optional; "
+            "- `crosswalk` â€” CSV of account key to ZIP or tract GEOID\n"
+            "- `acs` â€” the ACS pull from `tools/fetch_census.py`\n"
+            "- `geometry` â€” Census cartographic-boundary GeoJSON (optional; "
             "without it the tables render and the map does not)")
         return
 
@@ -179,7 +179,7 @@ def render(result, cfg) -> None:
                      "--tracts)", geography, ", ".join(absent))
 
     if geography == "zcta":
-        st.caption("ZIP basis — income joins are ZCTA-wide and extend past the "
+        st.caption("ZIP basis â€” income joins are ZCTA-wide and extend past the "
                    "service-area boundary.")
 
     settings = _settings(cfg, geography)
@@ -208,13 +208,13 @@ def render(result, cfg) -> None:
     joined, join_report = aff.attach_geography(bills, crosswalk, settings)
 
     # The join report leads. Every number below it is computed on the matched
-    # subset, so a poor match rate is not a footnote — it is the headline.
+    # subset, so a poor match rate is not a footnote â€” it is the headline.
     rate = join_report["match_rate"]
     line = (f"{join_report['matched']:,} of {join_report['accounts']:,} accounts "
             f"matched ({rate:.1%}), across {join_report['geographies']} "
             f"{'tracts' if geography == 'tract' else 'ZIPs'}.")
     (st.warning if rate < 0.95 else st.success)(
-        line + ("  Below 95% — check the crosswalk key and vintage before "
+        line + ("  Below 95% â€” check the crosswalk key and vintage before "
                 "reading anything into these averages." if rate < 0.95 else ""))
 
     agg = aff.representative_by_geography(joined, settings)
@@ -259,18 +259,19 @@ def render(result, cfg) -> None:
             clicked = _clicked_geoid(event)
         except TypeError:
             # Older Streamlit without on_select. Say so rather than letting
-            # the click die silently — the fix is a one-line update.
+            # the click die silently â€” the fix is a one-line update.
             st.vega_lite_chart(spec, width='stretch')
             st.caption(f"Map click needs Streamlit 1.35+ (installed: "
                        f"{st.__version__}). Update with "
                        f"`py -m pip install -U streamlit`; the menu below "
                        f"works meanwhile.")
     else:
-        log.info("affordability: no geometry file for %s — ranked table only",
+        log.info("affordability: no geometry file for %s â€” ranked table only",
                  geography)
 
     _accounts_panel(joined, live, crosswalk_path=paths["crosswalk"],
-                    settings=settings, geography=geography, clicked=clicked)
+                    settings=settings, geography=geography, clicked=clicked,
+                    column=column)
 
     st.altair_chart(_ranked_bars(live, column, threshold), width='stretch')
 
@@ -297,8 +298,8 @@ def render(result, cfg) -> None:
         skew = live["income_skew"]
         worst = live.loc[skew.idxmax()]
         st.caption(
-            f"**Skew** is mean ÷ median household income — a tail indicator, "
-            f"not a burden. Range here {skew.min():.2f}–{skew.max():.2f}. A high "
+            f"**Skew** is mean Ã· median household income â€” a tail indicator, "
+            f"not a burden. Range here {skew.min():.2f}â€“{skew.max():.2f}. A high "
             f"value means a long upper income tail, so the median understates "
             f"how hard the bill lands on that geography's lower-income "
             f"households. Highest here: {worst['geoid']} at "
@@ -310,7 +311,7 @@ def render(result, cfg) -> None:
             st.caption(
                 f"{n} geographies have a 90% confidence band on median income "
                 f"that straddles the {threshold:.1%} threshold. They are not "
-                f"shown to exceed it — the ACS estimate is not precise enough "
+                f"shown to exceed it â€” the ACS estimate is not precise enough "
                 f"at this geography to say either way.")
 
     suppressed = int(table["suppressed"].sum())
@@ -329,7 +330,7 @@ def _clicked_geoid(event) -> str | None:
 
     The event shape has varied across Streamlit releases (attribute vs mapping
     access, list of records vs dict of lists), so every plausible shape is
-    tried before giving up — a shape mismatch must degrade to "no click", not
+    tried before giving up â€” a shape mismatch must degrade to "no click", not
     to a swallowed exception that leaves the click silently dead.
     """
     sel = getattr(event, "selection", None)
@@ -343,7 +344,7 @@ def _clicked_geoid(event) -> str | None:
         return None
     # Two shapes exist in the wild: a list of records [{field: value}], and a
     # dict of lists {field: [value, ...]}. Normalise to one record either way,
-    # and unwrap single-element lists — the earlier parser filtered list
+    # and unwrap single-element lists â€” the earlier parser filtered list
     # values out entirely, which silently discarded the dict-of-lists shape.
     first = points[0] if isinstance(points, (list, tuple)) else points
     try:
@@ -370,93 +371,200 @@ def _tract_label(geoid: str) -> str:
     return g
 
 
+def _operator_label(operator: str) -> str:
+     """Human-readable label for burden filter operator."""
+     return "greater than" if operator == "gt" else "less than"
+
+
+def _filter_by_burden(joined: pd.DataFrame, filter_type: str, operator: str, 
+                      threshold: float, column: str) -> pd.DataFrame:
+     """Filter accounts by burden % criteria.
+     
+     Args:
+         joined: DataFrame with account details and burden columns
+         filter_type: "geography" (filter by geography's burden) or "individual" (by account's burden)
+         operator: "gt" (greater than) or "lt" (less than)
+         threshold: burden % threshold (as decimal, e.g., 0.025 for 2.5%)
+         column: burden column name (e.g., "burden_mhi")
+     
+     Returns:
+         Filtered DataFrame
+     """
+     if filter_type == "geography":
+         # Filter by geography's burden threshold
+         frame = joined.copy()
+         # Create a mapping of geoid to its burden value
+         geo_burden = frame.groupby("geoid")[column].first()
+         if operator == "gt":
+             valid_geos = geo_burden[geo_burden > threshold].index
+         else:  # "lt"
+             valid_geos = geo_burden[geo_burden < threshold].index
+         frame = frame[frame["geoid"].isin(valid_geos)]
+     else:  # "individual"
+         # Filter by individual account's burden
+         frame = joined.copy()
+         # Each account has their own burden % (bill/income)
+         # Use the tract/geography's median household income for consistency
+         pct_income = frame["bill_revised"] / frame["mhi"]
+         if operator == "gt":
+             frame = frame[pct_income > threshold]
+         else:  # "lt"
+             frame = frame[pct_income < threshold]
+     
+     return frame
+
+
+
 def _accounts_panel(joined: pd.DataFrame, live: pd.DataFrame, crosswalk_path: str,
-                    settings, geography: str, clicked: str | None) -> None:
-    """Account-level drill-down for one geography.
+                    settings, geography: str, clicked: str | None, 
+                    column: str) -> None:
+     """Dual-mode account filter: by tract or by burden %."""
+     if "aff_filter_mode" not in st.session_state:
+         st.session_state["aff_filter_mode"] = "tract"
+     
+     st.subheader("Account Filter")
+     c1, c2 = st.columns([1, 2])
+     with c1:
+         fm = st.radio("Filter by", ["tract", "burden"],
+                      format_func=lambda x: "Tract" if x == "tract" else "Burden %",
+                      horizontal=True, key="aff_filter_mode")
+     
+     # BURDEN FILTER MODE
+     if fm == "burden":
+         with c2:
+             st.markdown("")
+         b1, b2, b3 = st.columns(3)
+         with b1:
+             bt = st.radio("Type", ["geography", "individual"],
+                          format_func=lambda x: "Geography" if x == "geography" else "Account",
+                          horizontal=True, key="aff_burden_type")
+         with b2:
+             op = st.radio("Operator", ["gt", "lt"],
+                          format_func=lambda x: ">" if x == "gt" else "<",
+                          horizontal=True, key="aff_burden_operator")
+         with b3:
+             tp = st.number_input("Threshold (%)", min_value=0.0, max_value=100.0,
+                                 value=2.5, step=0.1, key="aff_burden_threshold")
+         
+         frame = _filter_by_burden(joined, bt, op, tp/100, column)
+         frame = frame[frame["annual_usage"] > 0].copy()
+         if settings.basis_classes:
+             frame = frame[frame["cust_class"].isin(settings.basis_classes)]
+         
+         st.info(f"**{len(frame):,}** accounts with burden {_operator_label(op)} {tp:.1f}%")
+         
+         try:
+             extra = pd.read_csv(crosswalk_path, dtype=str)
+             extra.columns = [c.strip().lower() for c in extra.columns]
+             k = settings.crosswalk_key.lower()
+             if k in extra.columns and "city" in extra.columns:
+                 extra = extra.drop_duplicates(subset=[k])
+                 frame[settings.crosswalk_key] = frame[settings.crosswalk_key].astype(str)
+                 frame = frame.merge(extra[[k, "city"]], how="left",
+                                    left_on=settings.crosswalk_key, right_on=k)
+         except Exception:
+             pass
+         
+         cols = {"location_no": "Account", "city": "City",
+                 "meter_sz": "Meter", "annual_usage": "Annual usage",
+                 "bill_existing": "Existing Annual Bill",
+                 "bill_revised": "Proposed Annual Bill",
+                 "bill_change_pct": "Change",
+                 "pct_income": "Burden %"}
+         
+         frame["bill_change_pct"] = (frame["bill_revised"] - frame["bill_existing"]) \
+             / frame["bill_existing"].where(frame["bill_existing"] != 0)
+         frame["pct_income"] = frame["bill_revised"] / frame["mhi"]
+         
+         present = {k: v for k, v in cols.items() if k in frame.columns}
+         st.dataframe(
+             frame.sort_values("bill_revised", ascending=False)[list(present)]
+             .rename(columns=present).style.format({
+                 "Annual usage": "{:,.0f}", "Existing Annual Bill": "${:,.0f}",
+                 "Proposed Annual Bill": "${:,.0f}", "Change": "{:+.1%}",
+                 "Burden %": "{:.2%}"}),
+             width="stretch", hide_index=True, height=420)
+     
+     # TRACT FILTER MODE
+     else:
+         options = live.sort_values("burden_mhi", ascending=False)["geoid"].tolist()
+         if not options:
+             st.warning("No geographies available.")
+             return
+         
+         st.markdown("")
+         # The selection event persists across reruns, so the click is applied only
+         # when it differs from the last one seen. Otherwise the map's most recent
+         # click would override the pulldown on every rerun and the pulldown would
+         # go dead after the first click.
+         if clicked in options and clicked != st.session_state.get("aff_last_click"):
+             st.session_state["aff_focus"] = clicked
+             st.session_state["aff_last_click"] = clicked
+         if st.session_state.get("aff_focus") not in options:
+             st.session_state.pop("aff_focus", None)
+         focus = st.selectbox(
+             "Click a tract on the map, or pick one here", options,
+             key="aff_focus", format_func=_tract_label)
 
-    Reached by clicking a polygon on the map, or from the selectbox (which is
-    also the path when the map is absent). The panel shows the same accounts
-    the burden was computed on — same class basis, billed accounts only — so
-    a figure on the map can always be traced to the customers behind it.
-    """
-    options = live.sort_values("burden_mhi", ascending=False)["geoid"].tolist()
-    if not options:
-        return
-    st.subheader("Accounts in a geography")
-    # The selection event persists across reruns, so the click is applied only
-    # when it differs from the last one seen. Otherwise the map's most recent
-    # click would override the pulldown on every rerun and the pulldown would
-    # go dead after the first click.
-    if clicked in options and clicked != st.session_state.get("aff_last_click"):
-        st.session_state["aff_focus"] = clicked
-        st.session_state["aff_last_click"] = clicked
-    if st.session_state.get("aff_focus") not in options:
-        st.session_state.pop("aff_focus", None)
-    focus = st.selectbox(
-        "Click a tract on the map, or pick one here", options,
-        key="aff_focus", format_func=_tract_label)
+         frame = joined[joined["geoid"] == focus]
+         if settings.basis_classes:
+             frame = frame[frame["cust_class"].isin(settings.basis_classes)]
+         frame = frame[frame["annual_usage"] > 0].copy()
 
-    frame = joined[joined["geoid"] == focus]
-    if settings.basis_classes:
-        frame = frame[frame["cust_class"].isin(settings.basis_classes)]
-    frame = frame[frame["annual_usage"] > 0].copy()
+         # City rides along from the crosswalk file when it carries one. Street
+         # addresses are deliberately NOT shown — account number plus city is
+         # enough to work a list without putting a household's address on screen.
+         try:
+             extra = pd.read_csv(crosswalk_path, dtype=str)
+             extra.columns = [c.strip().lower() for c in extra.columns]
+             key = settings.crosswalk_key.lower()
+             carry = [c for c in ("city",) if c in extra.columns]
+             if carry and key in extra.columns:
+                 extra = extra.drop_duplicates(subset=[key])
+                 frame[settings.crosswalk_key] = frame[settings.crosswalk_key].astype(str)
+                 frame = frame.merge(extra[[key] + carry], how="left",
+                                     left_on=settings.crosswalk_key, right_on=key)
+         except Exception:                                  # noqa: BLE001
+             carry = []
 
-    # City rides along from the crosswalk file when it carries one. Street
-    # addresses are deliberately NOT shown — account number plus city is
-    # enough to work a list without putting a household's address on screen.
-    try:
-        extra = pd.read_csv(crosswalk_path, dtype=str)
-        extra.columns = [c.strip().lower() for c in extra.columns]
-        key = settings.crosswalk_key.lower()
-        carry = [c for c in ("city",) if c in extra.columns]
-        if carry and key in extra.columns:
-            extra = extra.drop_duplicates(subset=[key])
-            frame[settings.crosswalk_key] = frame[settings.crosswalk_key].astype(str)
-            frame = frame.merge(extra[[key] + carry], how="left",
-                                left_on=settings.crosswalk_key, right_on=key)
-    except Exception:                                  # noqa: BLE001
-        carry = []
+         row = live.loc[live["geoid"] == focus].iloc[0]
+         bits = [f"{len(frame):,} accounts", f"median bill ${row['bill_revised']:,.0f}"]
+         if pd.notna(row.get("burden_mhi")):
+             bits.append(f"burden {row['burden_mhi']:.2%}")
+         if pd.notna(row.get("mhi")):
+             bits.append(f"median income ${row['mhi']:,.0f}")
+         st.caption(f"**{_tract_label(focus)}** — " + " · ".join(bits))
 
-    row = live.loc[live["geoid"] == focus].iloc[0]
-    bits = [f"{len(frame):,} accounts", f"median bill ${row['bill_revised']:,.0f}"]
-    if pd.notna(row.get("burden_mhi")):
-        bits.append(f"burden {row['burden_mhi']:.2%}")
-    if pd.notna(row.get("mhi")):
-        bits.append(f"median income ${row['mhi']:,.0f}")
-    st.caption(f"**{_tract_label(focus)}** — " + " · ".join(bits))
-
-    cols = {"location_no": "Account", "city": "City",
-            "meter_sz": "Meter", "annual_usage": "Annual usage",
-            "bill_existing": "Existing Annual Bill",
-            "bill_revised": "Proposed Annual Bill",
-            "bill_change_pct": "Change",
-            "pct_income": "Proposed Bill as % of Income"}
-    frame["bill_change_pct"] = (frame["bill_revised"] - frame["bill_existing"]) \
-        / frame["bill_existing"].where(frame["bill_existing"] != 0)
-    # Each account's own bill against the geography's median household income
-    # (CPI-indexed) — the same denominator the map uses, so the account list
-    # and the map agree about what a percent means.
-    mhi = row.get("mhi")
-    frame["pct_income"] = (frame["bill_revised"] / mhi
-                           if pd.notna(mhi) and mhi else pd.NA)
-    present = {k: v for k, v in cols.items() if k in frame.columns}
-    st.dataframe(
-        frame.sort_values("bill_revised", ascending=False)[list(present)]
-        .rename(columns=present).style.format({
-            "Annual usage": "{:,.0f}", "Existing Annual Bill": "${:,.0f}",
-            "Proposed Annual Bill": "${:,.0f}", "Change": "{:+.1%}",
-            "Proposed Bill as % of Income": "{:.2%}"}),
-        width="stretch", hide_index=True, height=420)
-
-
+         cols = {"location_no": "Account", "city": "City",
+                 "meter_sz": "Meter", "annual_usage": "Annual usage",
+                 "bill_existing": "Existing Annual Bill",
+                 "bill_revised": "Proposed Annual Bill",
+                 "bill_change_pct": "Change",
+                 "pct_income": "Proposed Bill as % of Income"}
+         frame["bill_change_pct"] = (frame["bill_revised"] - frame["bill_existing"]) \
+             / frame["bill_existing"].where(frame["bill_existing"] != 0)
+         # Each account's own bill against the geography's median household income
+         # (CPI-indexed) — the same denominator the map uses, so the account list
+         # and the map agree about what a percent means.
+         mhi = row.get("mhi")
+         frame["pct_income"] = (frame["bill_revised"] / mhi
+                                if pd.notna(mhi) and mhi else pd.NA)
+         present = {k: v for k, v in cols.items() if k in frame.columns}
+         st.dataframe(
+             frame.sort_values("bill_revised", ascending=False)[list(present)]
+             .rename(columns=present).style.format({
+                 "Annual usage": "{:,.0f}", "Existing Annual Bill": "${:,.0f}",
+                 "Proposed Annual Bill": "${:,.0f}", "Change": "{:+.1%}",
+                 "Proposed Bill as % of Income": "{:.2%}"}),
+             width="stretch", hide_index=True, height=420)
 def _map(geojson: dict, table: pd.DataFrame, column: str, cfg,
          threshold: float = 0.015, boundary: dict | None = None) -> dict:
     """Choropleth of the service area, colored on threshold-anchored bins.
 
     Bins are fixed around the primary affordability screen (default the
     California 1.5%-of-MHI convention) rather than quantiles, so color answers
-    "which side of the threshold, and by how much" — the question the exhibit
-    exists for — instead of "how does this polygon rank against its neighbours".
+    "which side of the threshold, and by how much" â€” the question the exhibit
+    exists for â€” instead of "how does this polygon rank against its neighbours".
     The two darkest steps begin AT the threshold, so crossing it is a visible
     break in the ramp.
 
@@ -465,7 +573,7 @@ def _map(geojson: dict, table: pd.DataFrame, column: str, cfg,
     the map reads as the district's service area. Income joined to a clipped
     polygon is still the estimate for the whole Census geography.
 
-    The GEOID property name differs by vintage and geography — ZCTA files carry
+    The GEOID property name differs by vintage and geography â€” ZCTA files carry
     ``ZCTA5CE20`` or ``GEOID20``, tract files ``GEOID``. Rather than hard-code
     one, the first recognised property on the first feature is used.
     """
@@ -490,7 +598,7 @@ def _map(geojson: dict, table: pd.DataFrame, column: str, cfg,
 
     # The GEOID lives nested under datum.properties, and Vega-Lite point
     # selections cannot reliably extract nested fields into the selection
-    # tuple — the click event arrives as an empty record ({}). Flattening the
+    # tuple â€” the click event arrives as an empty record ({}). Flattening the
     # id onto the datum with a calculate transform and selecting on the flat
     # field is the standard fix; the click then carries the GEOID.
     click = alt.selection_point(name="geo_click", on="click",
@@ -503,13 +611,13 @@ def _map(geojson: dict, table: pd.DataFrame, column: str, cfg,
         .transform_lookup(lookup=f"properties.{key}", from_=lookup)
         .encode(
             opacity=alt.condition(click, alt.value(1.0), alt.value(0.55)),
-            # A polygon with no burden value — suppressed for thinness, or with
-            # no income estimate — draws in neutral grey rather than taking the
+            # A polygon with no burden value â€” suppressed for thinness, or with
+            # no income estimate â€” draws in neutral grey rather than taking the
             # bottom of the ramp, which would read as "affordable".
             color=alt.condition(
                 f"isValid(datum['{column}'])",
                 alt.Color(f"{column}:Q",
-                          title=["Bill ÷ income", f"(screen {threshold:.2%})"],
+                          title=["Bill Ã· income", f"(screen {threshold:.2%})"],
                           scale=alt.Scale(type="threshold", domain=edges,
                                           range=RAMP),
                           legend=alt.Legend(format=".2%", orient="right")),
@@ -541,15 +649,15 @@ def _map(geojson: dict, table: pd.DataFrame, column: str, cfg,
     chart = (
         alt.layer(*layers)
         .properties(height=560,
-                    title=f"{cfg.agency} — proposed annual bill as a percent of "
+                    title=f"{cfg.agency} â€” proposed annual bill as a percent of "
                           f"household income")
         .project(type="mercator")
         .configure_view(stroke=None)
     )
 
     # Altair hoists selection params to the top level of a layered spec, and
-    # this Vega-Lite version then compiles the selection into EVERY layer —
-    # "Duplicate signal name" — leaving the selection dead. Vega-Lite requires
+    # this Vega-Lite version then compiles the selection into EVERY layer â€”
+    # "Duplicate signal name" â€” leaving the selection dead. Vega-Lite requires
     # selections inside a unit spec, so move the param back into the fills
     # layer (the one carrying the calculate transform). Verified against the
     # live renderer: with the param in-unit and the boundary underneath, a
@@ -571,7 +679,7 @@ def _ranked_bars(table: pd.DataFrame, column: str, threshold: float) -> alt.Char
     """Ranked bars with the threshold drawn on.
 
     Kept alongside the map because it reads faster at small counts and is the
-    honest presentation when there are only a handful of geographies — nine
+    honest presentation when there are only a handful of geographies â€” nine
     polygons is a bar chart wearing a map. At tract level the map earns its
     place and this becomes the sortable companion, so the labels drop out and
     the bars thin once the count gets large.
@@ -581,7 +689,7 @@ def _ranked_bars(table: pd.DataFrame, column: str, threshold: float) -> alt.Char
     many = len(frame) > 30
     bars = (
         alt.Chart(frame, height=max(220, (11 if many else 26) * len(frame)))
-        # A white outline separates adjacent bars — at tract counts the bars
+        # A white outline separates adjacent bars â€” at tract counts the bars
         # sit nearly edge to edge and same-bin neighbours otherwise fuse into
         # one block.
         .mark_bar(size=9 if many else 18, color=theme.TEAL,
@@ -589,7 +697,7 @@ def _ranked_bars(table: pd.DataFrame, column: str, threshold: float) -> alt.Char
         .encode(
             y=alt.Y("label:N", sort="-x", title=None,
                     axis=alt.Axis(labels=not many)),
-            x=alt.X(f"{column}:Q", title="Bill ÷ household income",
+            x=alt.X(f"{column}:Q", title="Bill Ã· household income",
                     axis=alt.Axis(format=".1%")),
             tooltip=[alt.Tooltip("label:N", title="Geography"),
                      alt.Tooltip(f"{column}:Q", format=".2%", title="Burden"),
@@ -599,3 +707,4 @@ def _ranked_bars(table: pd.DataFrame, column: str, threshold: float) -> alt.Char
             .mark_rule(color=theme.SLATE, strokeDash=[5, 3])
             .encode(x="t:Q"))
     return (bars + rule).configure_view(stroke=None)
+

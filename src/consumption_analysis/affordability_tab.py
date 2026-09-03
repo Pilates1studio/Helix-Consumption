@@ -375,6 +375,15 @@ def _tract_label(geoid: str) -> str:
     return g
 
 
+def _tract_number(geoid: str) -> str:
+    """Extract just the tract reference number without 'Tract ' prefix.
+    E.g., '154.03' from geoid '06001015403'."""
+    label = _tract_label(geoid)
+    if label.startswith("Tract "):
+        return label[6:]  # Strip "Tract " prefix
+    return label
+
+
 def _operator_label(operator: str) -> str:
      """Human-readable label for burden filter operator."""
      return "greater than" if operator == "gt" else "less than"
@@ -478,8 +487,8 @@ def _accounts_panel(joined: pd.DataFrame, live: pd.DataFrame, crosswalk_path: st
          except Exception:
              pass
          
-         # Add tract label for display (human-readable reference)
-         frame["tract_label"] = frame["geoid"].map(_tract_label)
+         # Add tract reference number (human-readable without "Tract " prefix)
+         frame["tract_label"] = frame["geoid"].map(_tract_number)
          # Add numeric tract number for sorting
          frame["tract_number"] = frame["geoid"].astype(str).str[-6:].astype(int)
          

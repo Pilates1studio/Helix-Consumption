@@ -487,12 +487,12 @@ def _accounts_panel(joined: pd.DataFrame, live: pd.DataFrame, crosswalk_path: st
          # Define columns to display in the order requested
          cols = {"tract_label": "Tract", "location_no": "Account",
                  "meter_sz": "Meter", "annual_usage": "Annual usage",
-                 "bill_revised": "Proposed Bill",
+                 "bill_revised": "Proposed Annual Bill",
                  "pct_income": "Burden %"}
          
          present = {k: v for k, v in cols.items() if k in frame.columns}
          st.dataframe(
-             frame.sort_values("bill_revised", ascending=False)[list(present)]
+             frame.sort_values(["geoid", "location_no"], ascending=True)[list(present)]
              .rename(columns=present).style.format({
                  "Annual usage": "{:,.0f}", "Existing Annual Bill": "${:,.0f}",
                  "Proposed Annual Bill": "${:,.0f}", "Change": "{:+.1%}",
@@ -501,7 +501,7 @@ def _accounts_panel(joined: pd.DataFrame, live: pd.DataFrame, crosswalk_path: st
      
      # TRACT FILTER MODE
      else:
-         options = live.sort_values("burden_mhi", ascending=False)["geoid"].tolist()
+         options = live.sort_values("geoid", ascending=True)["geoid"].tolist()
          if not options:
              st.warning("No geographies available.")
              return
@@ -565,7 +565,7 @@ def _accounts_panel(joined: pd.DataFrame, live: pd.DataFrame, crosswalk_path: st
                                 if pd.notna(mhi) and mhi else pd.NA)
          present = {k: v for k, v in cols.items() if k in frame.columns}
          st.dataframe(
-             frame.sort_values("bill_revised", ascending=False)[list(present)]
+             frame.sort_values(["geoid", "location_no"], ascending=True)[list(present)]
              .rename(columns=present).style.format({
                  "Annual usage": "{:,.0f}", "Existing Annual Bill": "${:,.0f}",
                  "Proposed Annual Bill": "${:,.0f}", "Change": "{:+.1%}",

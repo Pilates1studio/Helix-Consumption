@@ -376,12 +376,13 @@ def _operator_label(operator: str) -> str:
      return "greater than" if operator == "gt" else "less than"
 
 
-def _filter_by_burden(joined: pd.DataFrame, filter_type: str, operator: str, 
+def _filter_by_burden(joined: pd.DataFrame, live: pd.DataFrame, filter_type: str, operator: str, 
                       threshold: float, column: str) -> pd.DataFrame:
      """Filter accounts by burden % criteria.
      
      Args:
-         joined: DataFrame with account details and burden columns
+         joined: DataFrame with account details
+         live: DataFrame with geography-level burden data
          filter_type: "geography" (filter by geography's burden) or "individual" (by account's burden)
          operator: "gt" (greater than) or "lt" (less than)
          threshold: burden % threshold (as decimal, e.g., 0.025 for 2.5%)
@@ -392,14 +393,12 @@ def _filter_by_burden(joined: pd.DataFrame, filter_type: str, operator: str,
      """
      if filter_type == "geography":
          # Filter by geography's burden threshold
-         frame = joined.copy()
-         # Create a mapping of geoid to its burden value
-         geo_burden = frame.groupby("geoid")[column].first()
+         # Get geographies that meet the burden criteria from live data
          if operator == "gt":
-             valid_geos = geo_burden[geo_burden > threshold].index
+             valid_geos = live[live[column] > threshold]["geoid"].unique()
          else:  # "lt"
-             valid_geos = geo_burden[geo_burden < threshold].index
-         frame = frame[frame["geoid"].isin(valid_geos)]
+             valid_geos = live[live[column] < threshold]["geoid"].unique()
+         frame = joined[joined["geoid"].isin(valid_geos)].copy()
      else:  # "individual"
          # Filter by individual account's burden
          frame = joined.copy()
@@ -446,10 +445,15 @@ def _accounts_panel(joined: pd.DataFrame, live: pd.DataFrame, crosswalk_path: st
              tp = st.number_input("Threshold (%)", min_value=0.0, max_value=100.0,
                                  value=2.5, step=0.1, key="aff_burden_threshold")
          
-         frame = _filter_by_burden(joined, bt, op, tp/100, column)
+         frame = _filter_by_burden(joined, live, bt, op, tp/100, column)
          frame = frame[frame["annual_usage"] > 0].copy()
          if settings.basis_classes:
              frame = frame[frame["cust_class"].isin(settings.basis_classes)]
+         
+         # Merge mhi data from live dataframe for burden calculations
+         if "mhi" not in frame.columns:
+             mhi_data = live[["geoid", "mhi"]].drop_duplicates(subset=["geoid"])
+             frame = frame.merge(mhi_data, on="geoid", how="left")
          
          st.info(f"**{len(frame):,}** accounts with burden {_operator_label(op)} {tp:.1f}%")
          
